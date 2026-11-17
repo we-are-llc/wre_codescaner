@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QRコードスキャナー</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>QRコードスキャナー</h1>
+    <p class="sub">画面キャプチャ・クリップボード・ファイルから画像を取得し、含まれるQRコードを読み取ります。画像はブラウザ内でのみ処理されます。</p>
+  </header>
+
+  <main>
+    <section class="sources">
+      <button id="btn-screen" type="button">画面をキャプチャ</button>
+      <button id="btn-clipboard" type="button">クリップボードから貼り付け</button>
+      <label class="button" for="file-input">ファイルを選択</label>
+      <input id="file-input" type="file" accept="image/*" multiple hidden>
+    </section>
+
+    <div id="dropzone" class="dropzone" tabindex="0">
+      ここに画像をドロップ、または <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>V</kbd> で貼り付け
+    </div>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section id="results" class="results"></section>
+
+    <section id="preview-wrap" class="preview-wrap" hidden>
+      <canvas id="preview"></canvas>
+    </section>
+  </main>
+
+  <template id="result-tpl">
+    <article class="result">
+      <div class="result-head">
+        <span class="badge"></span>
+        <div class="actions">
+          <a class="open" target="_blank" rel="noopener noreferrer" hidden>開く</a>
+          <button type="button" class="copy">コピー</button>
+        </div>
+      </div>
+      <pre class="data"></pre>
+    </article>
+  </template>
+
+  <script src="vendor/jsQR.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
