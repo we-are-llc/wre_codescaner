@@ -6,7 +6,7 @@
 - クリップボード（ボタン / `Ctrl`・`⌘` + `V`）
 - ファイル選択 / ドラッグ&ドロップ
 
-デコードはネイティブ `BarcodeDetector` を優先し、未対応環境では同梱の [jsQR](https://github.com/cozmo/jsQR)（Apache-2.0, `vendor/`）を使用します。画像は外部に送信されません。
+デコードはネイティブ `BarcodeDetector` → [zxing-wasm](https://github.com/Sec-ant/zxing-wasm)（MIT / zxing-cpp: Apache-2.0）→ [jsQR](https://github.com/cozmo/jsQR)（Apache-2.0）の順に試します（いずれも `vendor/` に同梱）。小さい画像は拡大して再試行します。画像は外部に送信されません。
 
 ## 起動
 

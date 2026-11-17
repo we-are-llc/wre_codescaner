@@ -86,6 +86,27 @@
   }
 
   // ---------- QR デコード ----------
+  // 優先順: BarcodeDetector (ネイティブ) → zxing-wasm → jsQR
+  // 小さい画像は拡大して再試行する (小さく写ったQRや低解像度の貼り付け画像対策)
+
+  const UPSCALE_TARGET = 1600; // 拡大時の長辺の目標ピクセル数
+  const UPSCALE_MAX = 6;       // 最大拡大率
+
+  function scaledCanvas(canvas, scale) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(canvas.width * scale);
+    c.height = Math.round(canvas.height * scale);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  function unscale(codes, scale) {
+    if (scale === 1) return codes;
+    return codes.map((c) => ({ ...c, corners: c.corners.map((p) => ({ x: p.x / scale, y: p.y / scale })) }));
+  }
 
   let nativeDetector = null;
   async function getNativeDetector() {
@@ -111,6 +132,41 @@
     } catch {
       return [];
     }
+  }
+
+  let zxingReady = null;
+  function initZXing() {
+    if (zxingReady) return zxingReady;
+    if (typeof ZXingWASM === 'undefined') return (zxingReady = Promise.resolve(false));
+    const wasmUrl = new URL('vendor/zxing_reader.wasm', document.baseURI).href;
+    ZXingWASM.setZXingModuleOverrides({
+      locateFile: (path, prefix) => (path.endsWith('.wasm') ? wasmUrl : prefix + path),
+    });
+    zxingReady = ZXingWASM.getZXingModule().then(() => true, (e) => {
+      console.warn('zxing-wasm の読み込みに失敗しました。jsQR を使用します。', e);
+      return false;
+    });
+    return zxingReady;
+  }
+
+  async function decodeZXing(canvas) {
+    if (!(await initZXing())) return null; // null = 利用不可
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const found = await ZXingWASM.readBarcodes(img, {
+      formats: ['QRCode', 'MicroQRCode', 'rMQRCode'],
+      tryHarder: true,
+      tryRotate: true,
+      tryInvert: true,
+      tryDownscale: true,
+      maxNumberOfSymbols: MAX_CODES,
+    });
+    return found
+      .filter((r) => r.isValid)
+      .map((r) => {
+        const p = r.position;
+        return { data: r.text, corners: [p.topLeft, p.topRight, p.bottomRight, p.bottomLeft], engine: 'zxing' };
+      });
   }
 
   // jsQR は1回で1つしか検出しないため、見つけた領域を塗りつぶして繰り返す
@@ -146,19 +202,37 @@
     return out;
   }
 
+  // 1つのスケールで各エンジンを試す
+  async function decodeAtScale(canvas) {
+    const native = await decodeNative(canvas);
+    if (native.length) return native;
+    const zx = await decodeZXing(canvas);
+    if (zx && zx.length) return zx;
+    return decodeJsQR(canvas);
+  }
+
   async function decodeAll(canvas) {
+    const scales = [1];
+    const longSide = Math.max(canvas.width, canvas.height);
+    if (longSide < UPSCALE_TARGET) {
+      const s = Math.min(UPSCALE_MAX, UPSCALE_TARGET / longSide);
+      if (s >= 1.5) scales.push(s);
+      if (s >= 3) scales.push(s / 2);
+    }
+
     const results = [];
     const seen = new Set();
-    const add = (list) => {
-      for (const r of list) {
+    for (const scale of scales) {
+      const target = scale === 1 ? canvas : scaledCanvas(canvas, scale);
+      const codes = unscale(await decodeAtScale(target), scale);
+      for (const r of codes) {
         const key = r.data + '|' + Math.round(r.corners[0].x / 10) + ',' + Math.round(r.corners[0].y / 10);
         if (seen.has(key)) continue;
         seen.add(key);
         results.push(r);
       }
-    };
-    add(await decodeNative(canvas));
-    if (results.length === 0) add(decodeJsQR(canvas));
+      if (results.length) break;
+    }
     return results;
   }
 
